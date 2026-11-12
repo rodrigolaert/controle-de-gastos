@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Gastos Mensais — Rodrigo & Camila</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <p class="brand-mark">Gastos Mensais</p>
+        <p class="brand-sub">Rodrigo &amp; Camila</p>
+      </div>
+      <div class="controls">
+        <label class="field">
+          <span>Ano</span>
+          <select id="yearSelect"></select>
+        </label>
+        <div class="view-toggle" role="tablist" aria-label="Visualização">
+          <button type="button" class="view-btn active" data-view="mensal" role="tab" aria-selected="true">Mensal</button>
+          <button type="button" class="view-btn" data-view="anual" role="tab" aria-selected="false">Anual</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section id="monthlyView" class="panel">
+        <div class="month-nav">
+          <button type="button" id="prevMonth" class="icon-btn" aria-label="Mês anterior">‹</button>
+          <div class="month-title-wrap">
+            <h1 id="monthTitle">Abril 2026</h1>
+            <button
+              type="button"
+              id="settleBtn"
+              class="settle-btn"
+              aria-pressed="false"
+              title="Marcar dívida do mês como quitada"
+            >
+              <span class="settle-icon" aria-hidden="true"></span>
+              <span class="settle-label">Pendente</span>
+            </button>
+          </div>
+          <button type="button" id="nextMonth" class="icon-btn" aria-label="Próximo mês">›</button>
+        </div>
+
+        <div class="split-card">
+          <div class="section-head">
+            <h2>Divisão do mês</h2>
+            <p>Ajuste a contribuição de cada um. A soma deve ser 100%.</p>
+          </div>
+          <div class="split-grid">
+            <label class="split-person rodrigo">
+              <span class="person-name">Rodrigo</span>
+              <div class="pct-input">
+                <input type="number" id="pctRodrigo" min="0" max="100" step="1" value="50" />
+                <span>%</span>
+              </div>
+              <input type="range" id="rangeRodrigo" min="0" max="100" value="50" />
+            </label>
+            <label class="split-person camila">
+              <span class="person-name">Camila</span>
+              <div class="pct-input">
+                <input type="number" id="pctCamila" min="0" max="100" step="1" value="50" />
+                <span>%</span>
+              </div>
+              <input type="range" id="rangeCamila" min="0" max="100" value="50" />
+            </label>
+          </div>
+          <p id="splitHint" class="hint">Divisão equilibrada 50 / 50</p>
+        </div>
+
+        <div class="expenses-card">
+          <div class="section-head">
+            <h2>Gastos comuns</h2>
+            <p>Informe quanto cada um pagou em cada categoria. O total é calculado automaticamente.</p>
+          </div>
+          <form id="addCategoryForm" class="add-category">
+            <input
+              id="newCategoryInput"
+              type="text"
+              maxlength="40"
+              placeholder="Nova categoria"
+              autocomplete="off"
+            />
+            <button type="submit" class="ghost-btn accent-btn">Adicionar categoria</button>
+          </form>
+          <div class="expense-table-wrap">
+            <table class="expense-table">
+              <colgroup>
+                <col class="col-cat" />
+                <col class="col-val" />
+                <col class="col-val" />
+                <col class="col-sum" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Categoria</th>
+                  <th class="col-rodrigo">Rodrigo (R$)</th>
+                  <th class="col-camila">Camila (R$)</th>
+                  <th class="col-total">Total</th>
+                </tr>
+              </thead>
+              <tbody id="expenseRows"></tbody>
+              <tfoot id="expenseFoot"></tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="expenses-card comments-card">
+          <div class="section-head">
+            <h2>Comentários</h2>
+            <p>Anotações do mês (observações, acordos, exceções).</p>
+          </div>
+          <textarea
+            id="monthComments"
+            rows="4"
+            maxlength="2000"
+            placeholder="Escreva aqui qualquer comentário sobre este mês..."
+          ></textarea>
+        </div>
+
+        <div class="summary-grid" id="monthlySummary"></div>
+      </section>
+
+      <section id="yearlyView" class="panel hidden">
+        <div class="section-head year-head">
+          <h1>Resumo anual <span id="yearLabel">2026</span></h1>
+          <p>Totais, médias de contribuição e saldo acumulado do ano.</p>
+        </div>
+        <div class="summary-grid" id="yearlySummary"></div>
+        <div class="expenses-card">
+          <div class="section-head">
+            <h2>Por mês</h2>
+            <p>Clique em um mês para editar os detalhes.</p>
+          </div>
+          <div class="year-table-wrap">
+            <table class="year-table">
+              <thead>
+                <tr>
+                  <th>Mês</th>
+                  <th>Total</th>
+                  <th>Rodrigo</th>
+                  <th>Camila</th>
+                  <th>Pago R.</th>
+                  <th>Pago C.</th>
+                  <th>Saldo</th>
+                  <th>Quitado</th>
+                </tr>
+              </thead>
+              <tbody id="yearRows"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="expenses-card">
+          <div class="section-head">
+            <h2>Por categoria</h2>
+            <p>Soma anual de cada gasto comum.</p>
+          </div>
+          <div id="categoryYearBars" class="category-bars"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Dados salvos automaticamente neste navegador.</p>
+      <div class="footer-actions">
+        <button type="button" id="exportBtn" class="ghost-btn">Exportar JSON</button>
+        <button type="button" id="exportCsvBtn" class="ghost-btn">Exportar CSV</button>
+        <label class="ghost-btn file-btn">
+          Importar JSON
+          <input type="file" id="importInput" accept="application/json,.json" hidden />
+        </label>
+        <button type="button" id="clearMonthBtn" class="ghost-btn danger">Limpar mês</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
