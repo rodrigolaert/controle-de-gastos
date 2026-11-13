@@ -134,7 +134,8 @@ button, input, select, textarea {
 .pct-input input,
 .expense-table input,
 .add-category input,
-.comments-card textarea {
+.comments-card textarea,
+.auth-card input {
   border: 1px solid var(--line);
   background: rgba(8, 14, 24, 0.85);
   border-radius: 14px;
@@ -161,7 +162,8 @@ button, input, select, textarea {
 .pct-input input:focus,
 .expense-table input:focus,
 .add-category input:focus,
-.comments-card textarea:focus {
+.comments-card textarea:focus,
+.auth-card input:focus {
   outline: none;
   border-color: rgba(34, 211, 238, 0.65);
   box-shadow: var(--glow-cyan);
@@ -170,7 +172,8 @@ button, input, select, textarea {
 
 .expense-table input.input-camila:focus,
 .add-category input:focus,
-.comments-card textarea:focus {
+.comments-card textarea:focus,
+.auth-card input:focus {
   border-color: rgba(244, 114, 182, 0.65);
   box-shadow: var(--glow-magenta);
 }
@@ -801,9 +804,119 @@ button, input, select, textarea {
   align-items: center;
 }
 
+.topbar-side {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: end;
+}
+
+.account {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.account-user {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-screen,
+.modal {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem 1rem;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(5, 8, 14, 0.72);
+  min-height: 100%;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 0.95rem;
+  padding: 1.45rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%),
+    var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.auth-card h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+  line-height: 1.25;
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.auth-card input {
+  width: 100%;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.auth-error {
+  margin: 0;
+  min-height: 1.2em;
+  color: var(--danger);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.auth-submit,
+.modal-actions .accent-btn,
+.modal-actions .ghost-btn {
+  width: 100%;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.modal-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+
 @media (max-width: 720px) {
   .app {
     width: min(100% - 1.25rem, 1100px);
+  }
+
+  .topbar-side {
+    justify-items: stretch;
+    width: 100%;
+  }
+
+  .account {
+    justify-content: flex-start;
+  }
+
+  .account-user {
+    max-width: 100%;
   }
 
   .split-grid {
