@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="dark" />
+  <meta name="robots" content="noindex" />
   <title>Gastos Mensais — Rodrigo & Camila</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -11,13 +12,57 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
+  <div id="bootScreen" class="auth-screen">
+    <div class="auth-card">
+      <p class="brand-mark">Gastos Mensais</p>
+      <p class="brand-sub">Rodrigo &amp; Camila</p>
+      <p class="hint">Carregando…</p>
+    </div>
+  </div>
+
+  <div id="authScreen" class="auth-screen hidden">
+    <div class="auth-card">
+      <p class="brand-mark">Gastos Mensais</p>
+      <p class="brand-sub">Rodrigo &amp; Camila</p>
+      <form id="authForm" class="auth-form" novalidate>
+        <label class="field">
+          <span>Usuário</span>
+          <input id="authUsername" type="text" name="username" autocomplete="username" value="Casa" maxlength="80" spellcheck="false" />
+        </label>
+        <label class="field">
+          <span>Senha</span>
+          <input id="authPassword" type="password" name="password" autocomplete="current-password" />
+        </label>
+        <p id="authHint" class="hint">Entre com o usuário e a senha da casa.</p>
+        <p id="authError" class="auth-error" role="alert"></p>
+        <button type="submit" id="authSubmit" class="ghost-btn accent-btn auth-submit">Entrar</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="uploadModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="uploadTitle">
+    <div class="auth-card">
+      <h2 id="uploadTitle">Enviar os gastos deste aparelho para a nuvem</h2>
+      <p class="hint">Encontramos gastos salvos neste aparelho e a casa na nuvem ainda está vazia. Enviar agora para que os aparelhos da casa vejam os mesmos gastos?</p>
+      <div class="modal-actions">
+        <button type="button" id="uploadConfirm" class="ghost-btn accent-btn">Enviar os gastos deste aparelho para a nuvem</button>
+        <button type="button" id="uploadDecline" class="ghost-btn">Não enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="app hidden" id="appShell">
     <header class="topbar">
       <div class="brand">
         <p class="brand-mark">Gastos Mensais</p>
         <p class="brand-sub">Rodrigo &amp; Camila</p>
       </div>
-      <div class="controls">
+      <div class="topbar-side">
+        <div class="account" id="accountBar">
+          <p class="account-user" id="accountUser"></p>
+          <button type="button" id="logoutBtn" class="ghost-btn">Sair</button>
+        </div>
+        <div class="controls">
         <label class="field">
           <span>Ano</span>
           <select id="yearSelect"></select>
@@ -25,6 +70,7 @@
         <div class="view-toggle" role="tablist" aria-label="Visualização">
           <button type="button" class="view-btn active" data-view="mensal" role="tab" aria-selected="true">Mensal</button>
           <button type="button" class="view-btn" data-view="anual" role="tab" aria-selected="false">Anual</button>
+        </div>
         </div>
       </div>
     </header>
@@ -168,7 +214,7 @@
     </main>
 
     <footer class="footer">
-      <p>Dados salvos automaticamente neste navegador.</p>
+      <p id="footerNote">Dados da casa salvos na nuvem. <span id="syncStatus" aria-live="polite"></span></p>
       <div class="footer-actions">
         <button type="button" id="exportBtn" class="ghost-btn">Exportar JSON</button>
         <button type="button" id="exportCsvBtn" class="ghost-btn">Exportar CSV</button>

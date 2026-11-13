@@ -2,6 +2,9 @@
   "use strict";
 
   const STORAGE_KEY = "gastos-mensais-v1";
+  const UPLOAD_OFFER_PREFIX = "gastos-mensais-cloud-offer-v1:";
+  const TAB_ID_KEY = "gastos-mensais-tab-id";
+  const TAB_SEQ_KEY = "gastos-mensais-tab-seq";
   const MONTH_NAMES = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -31,7 +34,7 @@
 
   const els = {
     yearSelect: document.getElementById("yearSelect"),
-    viewBtns: [...document.querySelectorAll(".view-btn")],
+    viewBtns: [...document.querySelectorAll("#appShell .view-btn")],
     monthlyView: document.getElementById("monthlyView"),
     yearlyView: document.getElementById("yearlyView"),
     prevMonth: document.getElementById("prevMonth"),
@@ -57,14 +60,38 @@
     exportCsvBtn: document.getElementById("exportCsvBtn"),
     importInput: document.getElementById("importInput"),
     clearMonthBtn: document.getElementById("clearMonthBtn"),
+    bootScreen: document.getElementById("bootScreen"),
+    authScreen: document.getElementById("authScreen"),
+    authForm: document.getElementById("authForm"),
+    authUsername: document.getElementById("authUsername"),
+    authPassword: document.getElementById("authPassword"),
+    authHint: document.getElementById("authHint"),
+    authError: document.getElementById("authError"),
+    authSubmit: document.getElementById("authSubmit"),
+    uploadModal: document.getElementById("uploadModal"),
+    uploadConfirm: document.getElementById("uploadConfirm"),
+    uploadDecline: document.getElementById("uploadDecline"),
+    appShell: document.getElementById("appShell"),
+    accountUser: document.getElementById("accountUser"),
+    logoutBtn: document.getElementById("logoutBtn"),
+    syncStatus: document.getElementById("syncStatus"),
   };
 
   const now = new Date();
-  let state = loadState();
-  let currentYear = clampYear(state.lastYear ?? now.getFullYear());
-  let currentMonth = clampMonth(state.lastMonth ?? now.getMonth());
+  let state = defaultState();
+  let currentYear = now.getFullYear();
+  let currentMonth = now.getMonth();
   let currentView = "mensal";
   let syncingSplit = false;
+  const cloud = {
+    enabled: false,
+    householdId: null,
+    timer: null,
+    inFlight: false,
+    dirty: false,
+    seq: 0,
+    tabId: readTabId(),
+  };
 
   function clampYear(y) {
     const n = Number(y);
@@ -177,33 +204,93 @@
     return { version: 1, months: {}, lastYear: now.getFullYear(), lastMonth: now.getMonth() };
   }
 
-  function loadState() {
+  const KNOWN_CATEGORY_NAMES = new Set(
+    DEFAULT_CATEGORIES.map((name) => name.toLocaleLowerCase("pt-BR"))
+  );
+  for (const names of LEGACY_DEFAULT_SETS) {
+    for (const name of names) KNOWN_CATEGORY_NAMES.add(name);
+  }
+
+  function monthHasUserData(raw) {
+    if (!raw || typeof raw !== "object") return false;
+    if (String(raw.comments || "").trim()) return true;
+    if (raw.settled === true) return true;
+    const pctR = raw.pctRodrigo;
+    const pctC = raw.pctCamila;
+    const rSet = pctR !== undefined && pctR !== null && pctR !== "";
+    const cSet = pctC !== undefined && pctC !== null && pctC !== "";
+    if ((rSet && clampPct(pctR) !== 50) || (cSet && clampPct(pctC) !== 50)) return true;
+    const categories = Array.isArray(raw.categories) ? raw.categories : [];
+    for (const category of categories) {
+      if (toNumber(category?.rodrigo) > 0 || toNumber(category?.camila) > 0) return true;
+      const name = String(category?.name || "").trim().toLocaleLowerCase("pt-BR");
+      if (name && !KNOWN_CATEGORY_NAMES.has(name)) return true;
+    }
+    return false;
+  }
+
+  function stateHasUserData(parsed) {
+    if (!parsed || typeof parsed !== "object" || !parsed.months || typeof parsed.months !== "object") {
+      return false;
+    }
+    return Object.values(parsed.months).some(monthHasUserData);
+  }
+
+  function parseStoredState(parsed) {
+    if (!parsed || typeof parsed !== "object") return defaultState();
+    const months = {};
+    if (parsed.months && typeof parsed.months === "object") {
+      for (const [key, value] of Object.entries(parsed.months)) {
+        if (/^\d{4}-\d{2}$/.test(key)) months[key] = normalizeMonth(value);
+      }
+    }
+    return {
+      version: 1,
+      months,
+      lastYear: clampYear(parsed.lastYear ?? now.getFullYear()),
+      lastMonth: clampMonth(parsed.lastMonth ?? now.getMonth()),
+    };
+  }
+
+  function loadDeviceState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return defaultState();
+      if (!raw) return { hasData: false, parsed: null };
       const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== "object") return defaultState();
-      const months = {};
-      if (parsed.months && typeof parsed.months === "object") {
-        for (const [key, value] of Object.entries(parsed.months)) {
-          if (/^\d{4}-\d{2}$/.test(key)) months[key] = normalizeMonth(value);
-        }
-      }
-      return {
-        version: 1,
-        months,
-        lastYear: clampYear(parsed.lastYear ?? now.getFullYear()),
-        lastMonth: clampMonth(parsed.lastMonth ?? now.getMonth()),
-      };
+      return { hasData: stateHasUserData(parsed), parsed };
     } catch {
-      return defaultState();
+      return { hasData: false, parsed: null };
     }
+  }
+
+  function loadState() {
+    const device = loadDeviceState();
+    if (!device.parsed) return defaultState();
+    return parseStoredState(device.parsed);
+  }
+
+  function cloudCacheKey() {
+    return `gastos-mensais-cloud-cache-v1:${cloud.householdId}`;
   }
 
   function saveState() {
     state.lastYear = currentYear;
     state.lastMonth = currentMonth;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (cloud.enabled) {
+      cloud.seq = bumpTabSeq();
+      cloud.dirty = true;
+      try {
+        localStorage.setItem(cloudCacheKey(), JSON.stringify(state));
+      } catch {
+        /* the browser cache is optional; the cloud copy is authoritative */
+      }
+      scheduleCloudSave();
+      return;
+    }
+    // Keep the pre-login device snapshot intact while the auth screen is up.
+    if (!els.appShell.classList.contains("hidden")) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
   }
 
   function getMonthData(year = currentYear, month = currentMonth) {
@@ -558,7 +645,9 @@
   });
 
   els.viewBtns.forEach((btn) => {
-    btn.addEventListener("click", () => setView(btn.dataset.view));
+    btn.addEventListener("click", () => {
+      if (btn.dataset.view) setView(btn.dataset.view);
+    });
   });
 
   els.prevMonth.addEventListener("click", () => {
@@ -860,7 +949,311 @@
     if (currentView === "anual") renderYearly();
   });
 
-  fillYears();
-  els.yearSelect.value = String(currentYear);
-  setView("mensal");
+  function readTabId() {
+    try {
+      let id = sessionStorage.getItem(TAB_ID_KEY);
+      if (!id) {
+        id = crypto.randomUUID();
+        sessionStorage.setItem(TAB_ID_KEY, id);
+      }
+      return id;
+    } catch {
+      return crypto.randomUUID();
+    }
+  }
+
+  function bumpTabSeq() {
+    let current = cloud.seq;
+    try {
+      current = Number(sessionStorage.getItem(TAB_SEQ_KEY)) || 0;
+    } catch {
+      current = cloud.seq;
+    }
+    const next = current + 1;
+    cloud.seq = next;
+    try {
+      sessionStorage.setItem(TAB_SEQ_KEY, String(next));
+    } catch {
+      /* the sequence still lives in memory for this page */
+    }
+    return next;
+  }
+
+  function tabHeaders(seq) {
+    return {
+      "X-Tab-Id": cloud.tabId,
+      "X-Tab-Seq": String(seq),
+    };
+  }
+
+  function setSyncStatus(text) {
+    if (els.syncStatus) els.syncStatus.textContent = text || "";
+  }
+
+  function showAuth() {
+    els.bootScreen.classList.add("hidden");
+    els.uploadModal.classList.add("hidden");
+    els.appShell.classList.add("hidden");
+    els.authScreen.classList.remove("hidden");
+  }
+
+  function showApp() {
+    els.bootScreen.classList.add("hidden");
+    els.authScreen.classList.add("hidden");
+    els.uploadModal.classList.add("hidden");
+    els.appShell.classList.remove("hidden");
+  }
+
+  function setAccount(me) {
+    els.accountUser.textContent = me.username || "Casa";
+  }
+
+  function applyWorkingState(next) {
+    state = next;
+    currentYear = state.lastYear;
+    currentMonth = state.lastMonth;
+  }
+
+  async function requestJson(path, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (options.body !== undefined) headers["Content-Type"] = "application/json";
+    const response = await fetch(path, {
+      method: options.method || "GET",
+      credentials: "same-origin",
+      headers,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+    const text = await response.text();
+    let data = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+    }
+    return { ok: response.ok, status: response.status, data };
+  }
+
+  function scheduleCloudSave() {
+    clearTimeout(cloud.timer);
+    cloud.timer = setTimeout(() => {
+      const seq = cloud.seq;
+      const payload = JSON.parse(JSON.stringify(state));
+      sendCloudSave(payload, seq);
+    }, 500);
+  }
+
+  async function sendCloudSave(payload, seq) {
+    if (!cloud.enabled) return;
+    if (cloud.inFlight) {
+      cloud.dirty = true;
+      return;
+    }
+    cloud.inFlight = true;
+    cloud.dirty = false;
+    setSyncStatus("Salvando…");
+    let result;
+    try {
+      result = await requestJson("/api/state", {
+        method: "PUT",
+        body: payload,
+        headers: tabHeaders(seq),
+      });
+    } catch {
+      result = { ok: false, status: 0, data: null };
+    }
+    cloud.inFlight = false;
+    if (!cloud.enabled) return;
+    if (result.status === 401) {
+      endSession("Sua sessão terminou. Entre de novo.");
+      return;
+    }
+    if (!result.ok) {
+      cloud.dirty = true;
+      setSyncStatus("Não foi possível salvar na nuvem");
+      clearTimeout(cloud.timer);
+      cloud.timer = setTimeout(scheduleCloudSave, 1500);
+      return;
+    }
+    setSyncStatus("");
+    if (cloud.dirty || cloud.seq !== seq) scheduleCloudSave();
+  }
+
+  function flushCloudKeepalive() {
+    if (!cloud.enabled) return;
+    clearTimeout(cloud.timer);
+    fetch("/api/state", {
+      method: "PUT",
+      credentials: "same-origin",
+      keepalive: true,
+      headers: {
+        "Content-Type": "application/json",
+        ...tabHeaders(cloud.seq),
+      },
+      body: JSON.stringify(state),
+    }).catch(() => {});
+  }
+
+  function askUpload() {
+    return new Promise((resolve) => {
+      els.bootScreen.classList.add("hidden");
+      els.authScreen.classList.add("hidden");
+      els.uploadModal.classList.remove("hidden");
+      els.uploadConfirm.focus();
+      const finish = (accepted) => {
+        els.uploadConfirm.removeEventListener("click", onYes);
+        els.uploadDecline.removeEventListener("click", onNo);
+        els.uploadModal.classList.add("hidden");
+        resolve(accepted);
+      };
+      const onYes = () => finish(true);
+      const onNo = () => finish(false);
+      els.uploadConfirm.addEventListener("click", onYes);
+      els.uploadDecline.addEventListener("click", onNo);
+    });
+  }
+
+  function endSession(message) {
+    cloud.enabled = false;
+    clearTimeout(cloud.timer);
+    els.authPassword.value = "";
+    els.authError.textContent = message || "";
+    showAuth();
+  }
+
+  async function enterApp(me) {
+    cloud.enabled = false;
+    cloud.householdId = "household";
+    setAccount(me);
+    setSyncStatus("");
+
+    const remote = await requestJson("/api/state");
+    if (remote.status === 401) {
+      endSession("Sua sessão terminou. Entre de novo.");
+      return;
+    }
+    if (!remote.ok || !remote.data) {
+      els.authError.textContent = "Não foi possível carregar os gastos da casa.";
+      showAuth();
+      return;
+    }
+
+    let nextParsed = remote.data;
+    const device = loadDeviceState();
+    const offerKey = `${UPLOAD_OFFER_PREFIX}household`;
+    let offered = false;
+    try {
+      offered = localStorage.getItem(offerKey) === "1";
+    } catch {
+      offered = true;
+    }
+
+    if (!offered && !stateHasUserData(remote.data) && device.hasData && device.parsed) {
+      const send = await askUpload();
+      try {
+        localStorage.setItem(offerKey, "1");
+      } catch {
+        /* if storage is blocked we may ask again next time */
+      }
+      if (send) {
+        const put = await requestJson("/api/state?onlyIfEmpty=1", {
+          method: "PUT",
+          body: device.parsed,
+          headers: tabHeaders(bumpTabSeq()),
+        });
+        if (put.status === 409 && put.data?.state) {
+          nextParsed = put.data.state;
+          setSyncStatus("A nuvem já tinha gastos. Usamos a versão da casa.");
+        } else if (put.ok && put.data) {
+          nextParsed = put.data;
+        } else if (put.status === 401) {
+          endSession("Sua sessão terminou. Entre de novo.");
+          return;
+        } else {
+          els.authError.textContent = put.data?.error || "Não foi possível enviar os gastos.";
+          showAuth();
+          return;
+        }
+      }
+    }
+
+    applyWorkingState(parseStoredState(nextParsed));
+    cloud.enabled = true;
+    showApp();
+    fillYears();
+    els.yearSelect.value = String(currentYear);
+    setView(currentView || "mensal");
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    const username = els.authUsername.value.trim();
+    const password = els.authPassword.value;
+    if (!username) {
+      els.authError.textContent = "Informe o usuário.";
+      return;
+    }
+    if (!password) {
+      els.authError.textContent = "Informe a senha.";
+      return;
+    }
+    els.authSubmit.disabled = true;
+    els.authError.textContent = "";
+    els.authSubmit.textContent = "Entrando…";
+    try {
+      const result = await requestJson("/api/auth/login", {
+        method: "POST",
+        body: { username, password },
+      });
+      if (!result.ok) {
+        els.authError.textContent = result.data?.error || "Não foi possível entrar.";
+        return;
+      }
+      els.authPassword.value = "";
+      await enterApp(result.data);
+    } catch {
+      els.authError.textContent = "Não foi possível conectar ao servidor.";
+    } finally {
+      els.authSubmit.disabled = false;
+      els.authSubmit.textContent = "Entrar";
+    }
+  }
+
+  async function logout() {
+    try {
+      await requestJson("/api/auth/logout", { method: "POST", body: {} });
+    } catch {
+      /* leave the screen even if the network failed */
+    }
+    endSession("");
+  }
+
+  els.authForm.addEventListener("submit", submitAuth);
+  els.logoutBtn.addEventListener("click", logout);
+  window.addEventListener("pagehide", flushCloudKeepalive);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushCloudKeepalive();
+  });
+
+  async function boot() {
+    try {
+      const me = await requestJson("/api/auth/me");
+      if (me.status === 401) {
+        showAuth();
+        return;
+      }
+      if (!me.ok || !me.data) {
+        els.authError.textContent = "Não foi possível conectar ao servidor.";
+        showAuth();
+        return;
+      }
+      await enterApp(me.data);
+    } catch {
+      els.authError.textContent = "Não foi possível conectar ao servidor.";
+      showAuth();
+    }
+  }
+
+  boot();
 })();
